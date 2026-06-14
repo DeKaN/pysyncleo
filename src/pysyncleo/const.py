@@ -1,0 +1,4 @@
+MAX_RETRIES = 5
+RETRY_TIMEOUT = 1.5
+PING_INTERVAL = 5.0
+SYNCLEO_MDNS_TYPE = "_syncleo._udp.local."
