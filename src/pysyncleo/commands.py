@@ -165,10 +165,6 @@ class SyncleoRawCommand(UdpCommand):
         self.value = payload
 
 
-class CmdPowerMode(SyncleoBoolCommand):
-    command_type = UdpCommandType.MODE
-
-
 class CmdKeepWarm(SyncleoBoolCommand):
     command_type = UdpCommandType.KEEP_WARM
 
@@ -207,6 +203,10 @@ class CmdNight(SyncleoBoolCommand):
 
 class CmdAccessControl(SyncleoBoolCommand):
     command_type = UdpCommandType.ACCESS_CONTROL
+
+
+class CmdMode(SyncleoByteCommand):
+    command_type = UdpCommandType.MODE
 
 
 class CmdRecipeId(SyncleoByteCommand):
