@@ -205,6 +205,10 @@ class CmdAccessControl(SyncleoBoolCommand):
     command_type = UdpCommandType.ACCESS_CONTROL
 
 
+class CmdVolume(SyncleoBoolCommand):
+    command_type = UdpCommandType.VOLUME
+
+
 class CmdMode(SyncleoByteCommand):
     command_type = UdpCommandType.MODE
 
@@ -219,10 +223,6 @@ class CmdRecipeStep(SyncleoByteCommand):
 
 class CmdError(SyncleoByteCommand):
     command_type = UdpCommandType.ERROR
-
-
-class CmdVolume(SyncleoByteCommand):
-    command_type = UdpCommandType.VOLUME
 
 
 class CmdSpeed(SyncleoByteCommand):
@@ -379,10 +379,6 @@ class CmdScheduleSet(SyncleoRawCommand):
 
 class CmdScheduleRemove(SyncleoRawCommand):
     command_type = UdpCommandType.SCHEDULE_REMOVE
-
-
-class CmdProgramData(SyncleoRawCommand):
-    command_type = UdpCommandType.PROGRAM_DATA
 
 
 class CmdMapTarget(SyncleoRawCommand):
@@ -562,3 +558,18 @@ class CmdPing(UdpCommand):
 
     def __init__(self):
         super().__init__(None)
+
+
+class CmdProgramData(UdpCommand):
+    command_type = UdpCommandType.PROGRAM_DATA
+
+    def __init__(self, data: bytes = b"", mode: bytes = b"\x00"):
+        self.mode = mode
+        self.data = data
+        super().__init__(self.mode + self.data)
+
+    def serialize(self) -> bytes:
+        return self.mode + self.data
+
+    def deserialize(self, payload: bytes) -> None:
+        self.value = payload
