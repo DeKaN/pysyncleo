@@ -573,3 +573,6 @@ class CmdProgramData(UdpCommand):
 
     def deserialize(self, payload: bytes) -> None:
         self.value = payload
+        if len(payload) >= 1:
+            self.mode = payload[0]
+            self.data = payload[1:]
