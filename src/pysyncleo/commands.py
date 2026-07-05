@@ -23,6 +23,18 @@ class UdpCommand:
         self.value = value
         self.byte_size = byte_size
 
+    def __repr__(self) -> str:
+        type_str = self.command_type.name if self.command_type is not None else "None"
+
+        if isinstance(self.value, bytes):
+            val_str = f"0x{self.value.hex()}"
+        elif isinstance(self.value, str):
+            val_str = f"'{self.value}'"
+        else:
+            val_str = self.value
+
+        return f"{self.__class__.__name__}(type={type_str}, value={val_str})"
+
     def serialize(self) -> bytes:
         return b""
 
@@ -574,5 +586,5 @@ class CmdProgramData(UdpCommand):
     def deserialize(self, payload: bytes) -> None:
         self.value = payload
         if len(payload) >= 1:
-            self.mode = payload[0]
+            self.mode = payload[:1]
             self.data = payload[1:]
