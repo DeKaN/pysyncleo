@@ -51,10 +51,7 @@ class AsyncDiscoveryListener:
 
 
 def state_update_callback(cmd):
-    if hasattr(cmd, "value"):
-        _LOGGER.info(f"🟢 DEVICE STATE UPDATE: {cmd.command_type.name} = {cmd.value}")
-    else:
-        _LOGGER.info(f"🟢 DEVICE STATE UPDATE: {cmd.command_type.name}")
+    _LOGGER.info(f"🟢 DEVICE STATE UPDATE: {cmd}")
 
 
 async def interact_with_device(conn):
@@ -104,7 +101,7 @@ async def main():
                 continue
 
             _LOGGER.info(
-                f"💡 Found Device: {discovered['name']} at {ip}:{discovered['port']}"
+                f"💡 Found Device: {discovered['name']} at {ip}:{discovered['port']}. Properties: {discovered}"
             )
 
             device = SyncleoUdpDevice.from_zeroconf(
@@ -115,7 +112,7 @@ async def main():
             if not conn:
                 continue
 
-            conn.on_state_updated = state_update_callback
+            conn.register_callback(state_update_callback)
             active_connections[ip] = conn
 
             await conn.connect()
@@ -126,6 +123,8 @@ async def main():
     finally:
         _LOGGER.info("Closing sockets and network listeners...")
 
+        if conn:
+            conn.unregister_callback(state_update_callback)
         await browser.async_cancel()
         await aiozc.async_close()
         transport.close()

@@ -1,3 +1,4 @@
+import logging
 import struct
 from typing import Tuple
 
@@ -11,6 +12,8 @@ from cryptography.hazmat.primitives.ciphers.modes import CBC
 import cryptography.hazmat.primitives.serialization as srlz
 
 from .enums import FrameType, UdpCommandType
+
+_LOGGER = logging.getLogger(__name__)
 
 
 class SyncleoEncoder:
@@ -85,28 +88,31 @@ class CryptoV2Encoder(SyncleoEncoder):
         return self._pack_header(seq=0, frame_type=FrameType.CMD, payload=payload)
 
     def encode(self, seq: int, frame_type: FrameType, payload: bytes) -> bytes:
-        if frame_type == FrameType.CMD and len(payload) > 0:
-            i = seq & 0xF
-            j = (seq >> 4) & 0xF
+        i = seq & 0xF
+        j = (seq >> 4) & 0xF
 
-            key = self.encoutkey[i:] + self.encoutkey[:i]
-            iv = self.encinkey[j:] + self.encinkey[:j]
+        key = self.encoutkey[i:] + self.encoutkey[:i]
+        iv = self.encinkey[j:] + self.encinkey[:j]
 
-            aes = AES(key)
-            cipher = ciphers.Cipher(aes, CBC(iv))
-            encryptor = cipher.encryptor()
+        _LOGGER.debug(
+            "Encrypting seq=%d: key=[%s] iv=[%s] payload=[%s]",
+            seq,
+            key.hex(),
+            iv.hex(),
+            payload.hex(),
+        )
 
-            newdata = bytearray([seq]) + payload
+        aes = AES(key)
+        cipher = ciphers.Cipher(aes, CBC(iv))
+        encryptor = cipher.encryptor()
 
-            padder = padding.PKCS7(aes.block_size).padder()
-            ciphertext = (
-                encryptor.update(padder.update(bytes(newdata)) + padder.finalize())
-                + encryptor.finalize()
-            )
+        newdata = bytearray([seq]) + payload
 
-            return self._pack_header(seq, frame_type, ciphertext)
+        padder = padding.PKCS7(aes.block_size).padder()
+        padded_data = padder.update(bytes(newdata)) + padder.finalize()
+        ciphertext = encryptor.update(padded_data) + encryptor.finalize()
 
-        return self._pack_header(seq, frame_type, payload)
+        return self._pack_header(seq, frame_type, ciphertext)
 
     def decode(self, data: bytes) -> Tuple[int, FrameType, bytes]:
         if len(data) < 4:
@@ -116,7 +122,7 @@ class CryptoV2Encoder(SyncleoEncoder):
         frame_type = FrameType(ftype_val)
         ciphertext = data[4 : 4 + length]
 
-        if frame_type in (FrameType.ACK, FrameType.NAK) or len(ciphertext) == 0:
+        if len(ciphertext) == 0:
             return seq, frame_type, ciphertext
 
         j = seq & 0xF
@@ -125,12 +131,31 @@ class CryptoV2Encoder(SyncleoEncoder):
         key = self.encinkey[j:] + self.encinkey[:j]
         iv = self.encoutkey[k:] + self.encoutkey[:k]
 
+        _LOGGER.debug(
+            "Decrypting seq=%d: key=[%s] iv=[%s] ciphertext=[%s]",
+            seq,
+            key.hex(),
+            iv.hex(),
+            ciphertext.hex(),
+        )
+
         aes = AES(key)
         cipher = ciphers.Cipher(aes, CBC(iv))
         decryptor = cipher.decryptor()
-        decrypted = decryptor.update(ciphertext) + decryptor.finalize()
 
-        unpadder = padding.PKCS7(aes.block_size).unpadder()
-        plaintext = unpadder.update(decrypted) + unpadder.finalize()
+        try:
+            decrypted = decryptor.update(ciphertext) + decryptor.finalize()
+            unpadder = padding.PKCS7(aes.block_size).unpadder()
+            plaintext = unpadder.update(decrypted) + unpadder.finalize()
+        except Exception as e:
+            _LOGGER.error("Failed to decrypt frame seq=%d: %s", seq, e)
+            raise
+
+        _LOGGER.debug("Decrypted result: [%s]", plaintext.hex())
+
+        if not plaintext or plaintext[0] != (seq & 0xFF):
+            raise ValueError(
+                f"Decrypted seq mismatch. Expected {seq & 0xFF}, got {plaintext[0]}"
+            )
 
         return seq, frame_type, plaintext[1:]

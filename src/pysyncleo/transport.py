@@ -23,7 +23,7 @@ class SyncleoConnection:
         self.inseq = 0
         self.outseq = 0
         self._unacked_seq: Dict[int, UnackedMessage] = {}
-        self.on_state_updated: Optional[Callable[[UdpCommand], None]] = None
+        self._callbacks: set[Callable[[UdpCommand], None]] = set()
         self.last_activity = time.monotonic()
 
         if self.device.protocol < 2:
@@ -37,6 +37,20 @@ class SyncleoConnection:
         _LOGGER.debug(f"TX [{self.device.inet_address[0]}]: {data.hex()}")
         self.last_activity = time.monotonic()
         self.transport.sendto(data, self.device.inet_address)
+
+    def register_callback(self, callback: Callable[[UdpCommand], None]) -> None:
+        self._callbacks.add(callback)
+
+    def unregister_callback(self, callback: Callable[[UdpCommand], None]) -> None:
+        self._callbacks.discard(callback)
+
+    def _notify_callbacks(self, cmd: UdpCommand) -> None:
+        for callback in self._callbacks:
+            try:
+                callback(cmd)
+            except Exception as e:
+                _LOGGER.warning(f"Error in callback {callback}: {e}")
+                pass
 
     async def connect(self):
         self.state = ConnectionState.CONNECTING
@@ -140,8 +154,7 @@ class SyncleoConnection:
             _LOGGER.debug(
                 f"Parsed State: {parsed_cmd.command_type.name} = {parsed_cmd.value}"
             )
-            if self.on_state_updated:
-                self.on_state_updated(parsed_cmd)
+            self._notify_callbacks(parsed_cmd)
 
     async def _session_loop(self):
         while True:
