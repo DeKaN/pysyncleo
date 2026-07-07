@@ -68,12 +68,12 @@ class SyncleoConnection:
     async def _run_initialization(self, mode: int):
         await asyncio.sleep(0.5)
 
-        _LOGGER.debug("Sending Time Sync...")
+        _LOGGER.info("Sending Time Sync...")
         current_unix_time = int(time.time())
         await self.send_command(CmdTimeSync(current_unix_time))
 
         if mode == 1:
-            _LOGGER.debug("Mode 1 detected: Triggering Diagnostic Init...")
+            _LOGGER.info("Mode 1 detected: Triggering Diagnostic Init...")
             await asyncio.sleep(0.2)
             await self.send_command(CmdInitDiagnostic())
 
@@ -151,9 +151,7 @@ class SyncleoConnection:
                 _LOGGER.warning("Received command with no command_type defined.")
                 return
 
-            _LOGGER.debug(
-                f"Parsed State: {parsed_cmd.command_type.name} = {parsed_cmd.value}"
-            )
+            _LOGGER.debug(f"Parsed State: {parsed_cmd}")
             self._notify_callbacks(parsed_cmd)
 
     async def _session_loop(self):
@@ -178,7 +176,7 @@ class SyncleoConnection:
 
                     if now - msg.last_sent >= RETRY_TIMEOUT:
                         if msg.attempts >= MAX_RETRIES:
-                            _LOGGER.warning(
+                            _LOGGER.info(
                                 f"Dropping packet seq={seq} after {MAX_RETRIES} failed attempts."
                             )
 
