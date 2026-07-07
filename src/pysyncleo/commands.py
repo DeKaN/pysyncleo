@@ -575,16 +575,16 @@ class CmdPing(UdpCommand):
 class CmdProgramData(UdpCommand):
     command_type = UdpCommandType.PROGRAM_DATA
 
-    def __init__(self, data: bytes = b"", mode: bytes = b"\x00"):
+    def __init__(self, data: bytes = b"", mode: int = 0):
         self.mode = mode
         self.data = data
-        super().__init__(self.mode + self.data)
+        super().__init__(self.mode.to_bytes(1, byteorder="little") + self.data)
 
     def serialize(self) -> bytes:
-        return self.mode + self.data
+        return self.mode.to_bytes(1, byteorder="little") + self.data
 
     def deserialize(self, payload: bytes) -> None:
         self.value = payload
         if len(payload) >= 1:
-            self.mode = payload[:1]
+            self.mode = payload[0]
             self.data = payload[1:]
