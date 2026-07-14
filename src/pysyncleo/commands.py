@@ -1,9 +1,12 @@
+import logging
 import struct
 from typing import Any, Dict, Optional, Tuple, Type
 
 from .enums import UdpCommandType
 from .models import DiagnosticStatus, OpenMqttConfig
 from .utils import is_bit_enabled
+
+_LOGGER = logging.getLogger(__name__)
 
 
 class UdpCommand:
@@ -377,10 +380,6 @@ class CmdMultiStep(SyncleoRawCommand):
     command_type = UdpCommandType.MULTI_STEP
 
 
-class CmdExpendables(SyncleoRawCommand):
-    command_type = UdpCommandType.EXPENDABLES
-
-
 class CmdDataSource(SyncleoRawCommand):
     command_type = UdpCommandType.DATA_SOURCE
 
@@ -403,14 +402,6 @@ class CmdWifiList(SyncleoRawCommand):
 
 class CmdWifiStatus(SyncleoRawCommand):
     command_type = UdpCommandType.WIFI_STATUS
-
-
-class CmdUUID(SyncleoRawCommand):
-    command_type = UdpCommandType.UUID
-
-
-class CmdTargetId(SyncleoRawCommand):
-    command_type = UdpCommandType.TARGET_ID
 
 
 class CmdDeviceDiagnostic(SyncleoRawCommand):
@@ -459,6 +450,30 @@ class CmdTimeSync(SyncleoCompositeCommand):
 
     def serialize(self) -> bytes:
         return struct.pack("<Ih", int(self.value[0]), int(self.value[1]))
+
+
+class CmdExpendables(SyncleoCompositeCommand):
+    command_type = UdpCommandType.EXPENDABLES
+
+    def serialize(self) -> bytes:
+        if not self.value:
+            return b""
+        return b"".join(struct.pack("<H", val) for val in self.value)
+
+    def deserialize(self, payload: bytes) -> None:
+        count = len(payload) // 2
+
+        if count == 0:
+            self.value = []
+            return
+
+        if len(payload) % 2 != 0:
+            _LOGGER.warning(
+                "CmdExpendables received malformed payload of length %d. Truncating.",
+                len(payload),
+            )
+        clean_payload = payload[: count * 2]
+        self.value = list(struct.unpack(f"<{count}H", clean_payload))
 
 
 class CmdOpenMqtt(UdpCommand):
@@ -516,6 +531,39 @@ class CmdOpenMqtt(UdpCommand):
             password=password,
             enabled=enabled,
         )
+
+
+class CmdTargetId(UdpCommand):
+    command_type = UdpCommandType.TARGET_ID
+
+    def __init__(self, target_id: bytes = b""):
+        super().__init__(self._prepare_value(target_id))
+
+    def serialize(self) -> bytes:
+        return self.value
+
+    def deserialize(self, payload: bytes) -> None:
+        self.value = self._prepare_value(payload)
+
+    def _prepare_value(self, value: bytes) -> bytes:
+        return value[:16].ljust(16, b"\x00")
+
+
+class CmdUUID(UdpCommand):
+    command_type = UdpCommandType.UUID
+
+    def __init__(self):
+        super().__init__(value=0xFFFFFFFFFFFFFFFF)
+
+    def deserialize(self, payload: bytes) -> None:
+        if len(payload) != 8:
+            _LOGGER.warning(
+                "CmdUuid received payload length %d (expected 8). Ignoring.",
+                len(payload),
+            )
+            return
+
+        self.value = struct.unpack(">Q", payload)[0]
 
 
 class CmdInitDiagnostic(UdpCommand):

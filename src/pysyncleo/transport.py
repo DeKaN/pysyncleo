@@ -3,7 +3,13 @@ import time
 import logging
 from typing import Callable, Dict, Optional, Tuple
 
-from .const import MAX_RETRIES, PING_INTERVAL, RETRY_TIMEOUT
+from .const import (
+    MAX_RECONNECT_ATTEMPTS,
+    MAX_SEND_RETRIES,
+    PING_INTERVAL,
+    RECONNECT_INTERVAL,
+    RETRY_TIMEOUT,
+)
 
 from .commands import CmdHandshake, CmdInitDiagnostic, CmdPing, CmdTimeSync, UdpCommand
 from .encoding import CryptoV2Encoder, PlainEncoder
@@ -24,7 +30,10 @@ class SyncleoConnection:
         self.outseq = 0
         self._unacked_seq: Dict[int, UnackedMessage] = {}
         self._callbacks: set[Callable[[UdpCommand], None]] = set()
-        self.last_activity = time.monotonic()
+        self._state_callbacks: set[Callable[[ConnectionState], None]] = set()
+        self._last_activity = time.monotonic()
+        self._last_reconnect_attempt = 0
+        self._reconnect_attempts = 0
 
         if self.device.protocol < 2:
             self.encoder = PlainEncoder(self.device)
@@ -35,7 +44,7 @@ class SyncleoConnection:
 
     def _send_bytes(self, data: bytes):
         _LOGGER.debug(f"TX [{self.device.inet_address[0]}]: {data.hex()}")
-        self.last_activity = time.monotonic()
+        self._last_activity = time.monotonic()
         self.transport.sendto(data, self.device.inet_address)
 
     def register_callback(self, callback: Callable[[UdpCommand], None]) -> None:
@@ -43,6 +52,25 @@ class SyncleoConnection:
 
     def unregister_callback(self, callback: Callable[[UdpCommand], None]) -> None:
         self._callbacks.discard(callback)
+
+    def register_state_callback(
+        self, callback: Callable[[ConnectionState], None]
+    ) -> None:
+        self._state_callbacks.add(callback)
+
+    def unregister_state_callback(
+        self, callback: Callable[[ConnectionState], None]
+    ) -> None:
+        self._state_callbacks.discard(callback)
+
+    def _set_state(self, new_state: ConnectionState):
+        if self.state != new_state:
+            self.state = new_state
+            for callback in self._state_callbacks:
+                try:
+                    callback(new_state)
+                except Exception as e:
+                    _LOGGER.warning(f"Error in state callback {callback}: {e}")
 
     def _notify_callbacks(self, cmd: UdpCommand) -> None:
         for callback in self._callbacks:
@@ -53,7 +81,7 @@ class SyncleoConnection:
                 pass
 
     async def connect(self):
-        self.state = ConnectionState.CONNECTING
+        self._set_state(ConnectionState.CONNECTING)
         self.outseq = 0
 
         _LOGGER.info(f"Initiating Handshake with {self.device.inet_address[0]}...")
@@ -64,6 +92,10 @@ class SyncleoConnection:
             frame=handshake_frame, attempts=1, last_sent=time.monotonic()
         )
         self._send_bytes(handshake_frame)
+
+    def disconnect(self):
+        self._set_state(ConnectionState.DISCONNECTED)
+        self._loop_task.cancel()
 
     async def _run_initialization(self, mode: int):
         await asyncio.sleep(0.5)
@@ -99,7 +131,7 @@ class SyncleoConnection:
 
     def feed_datagram(self, data: bytes):
         _LOGGER.debug(f"RX [{self.device.inet_address[0]}]: {data.hex()}")
-        self.last_activity = time.monotonic()
+        self._last_activity = time.monotonic()
 
         try:
             seq, frame_type, payload = self.encoder.decode(data)
@@ -126,7 +158,8 @@ class SyncleoConnection:
                 isinstance(parsed_cmd, CmdHandshake)
                 and self.state == ConnectionState.CONNECTING
             ):
-                self.state = ConnectionState.CONNECTED
+                self._set_state(ConnectionState.CONNECTED)
+                self._reconnect_attempts = 0
 
                 _LOGGER.info(
                     f"Device Connected! "
@@ -160,12 +193,35 @@ class SyncleoConnection:
                 await asyncio.sleep(0.5)
                 now = time.monotonic()
 
-                if self.state == ConnectionState.CONNECTED:
-                    if now - self.last_activity >= PING_INTERVAL:
-                        _LOGGER.debug(
-                            f"Idle for {PING_INTERVAL}s. Sending Keep-Alive PING to {self.device.inet_address[0]}"
+                match self.state:
+                    case ConnectionState.DISCONNECTED:
+                        _LOGGER.info(
+                            f"Connection to {self.device.inet_address[0]} permanently stopped."
                         )
-                        await self.send_command(CmdPing())
+                        break
+
+                    case ConnectionState.NOT_CONNECTED:
+                        if now - self._last_reconnect_attempt >= RECONNECT_INTERVAL:
+                            if self._reconnect_attempts >= MAX_RECONNECT_ATTEMPTS:
+                                _LOGGER.error(
+                                    f"Max reconnect attempts reached for {self.device.inet_address[0]}. Giving up."
+                                )
+                                self._set_state(ConnectionState.DISCONNECTED)
+                                break
+                            else:
+                                _LOGGER.info(
+                                    f"Device offline. Attempting auto-reconnect to {self.device.inet_address[0]}."
+                                )
+                                self._reconnect_attempts += 1
+                                self._last_reconnect_attempt = now
+                                asyncio.create_task(self.connect())
+
+                    case ConnectionState.CONNECTED:
+                        if now - self._last_activity >= PING_INTERVAL:
+                            _LOGGER.debug(
+                                f"Idle for {PING_INTERVAL}s. Sending Keep-Alive PING to {self.device.inet_address[0]}"
+                            )
+                            await self.send_command(CmdPing())
 
                 unacked_keys = list(self._unacked_seq.keys())
 
@@ -175,27 +231,30 @@ class SyncleoConnection:
                         continue
 
                     if now - msg.last_sent >= RETRY_TIMEOUT:
-                        if msg.attempts >= MAX_RETRIES:
+                        if msg.attempts >= MAX_SEND_RETRIES:
                             _LOGGER.info(
-                                f"Dropping packet seq={seq} after {MAX_RETRIES} failed attempts."
+                                f"Dropping packet seq={seq} after {MAX_SEND_RETRIES} failed attempts."
                             )
 
-                            if seq == 0 and self.state == ConnectionState.CONNECTING:
-                                self.state = ConnectionState.NOT_CONNECTED
+                            self._set_state(ConnectionState.DISCONNECTED)
 
                             del self._unacked_seq[seq]
                         else:
                             msg.attempts += 1
                             msg.last_sent = now
                             _LOGGER.debug(
-                                f"Retrying packet seq={seq} (Attempt {msg.attempts}/{MAX_RETRIES})"
+                                f"Retrying packet seq={seq} (Attempt {msg.attempts}/{MAX_SEND_RETRIES})"
                             )
                             self._send_bytes(msg.frame)
 
             except asyncio.CancelledError:
                 break
             except Exception as e:
-                _LOGGER.error(f"Error in session loop: {e}")
+                _LOGGER.error(
+                    f"Error in session loop for device {self.device.inet_address[0]}: {e}"
+                )
+                if self.state != ConnectionState.DISCONNECTED:
+                    self._set_state(ConnectionState.NOT_CONNECTED)
 
 
 class TransportManager(asyncio.DatagramProtocol):
@@ -222,3 +281,9 @@ class TransportManager(asyncio.DatagramProtocol):
         conn = SyncleoConnection(device, self.transport)
         self.connections[device.inet_address] = conn
         return conn
+
+    def unregister_device(self, device: SyncleoUdpDevice):
+        if device.inet_address in self.connections:
+            self.connections[device.inet_address].disconnect()
+            del self.connections[device.inet_address]
+            del self.devices[device.inet_address]
