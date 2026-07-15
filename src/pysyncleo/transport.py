@@ -31,6 +31,7 @@ class SyncleoConnection:
         self._unacked_seq: Dict[int, UnackedMessage] = {}
         self._callbacks: set[Callable[[UdpCommand], None]] = set()
         self._state_callbacks: set[Callable[[ConnectionState], None]] = set()
+        self._loop_task = None
         self._last_activity = time.monotonic()
         self._last_reconnect_attempt = 0
         self._reconnect_attempts = 0
@@ -39,8 +40,6 @@ class SyncleoConnection:
             self.encoder = PlainEncoder(self.device)
         else:
             self.encoder = CryptoV2Encoder(self.device)
-
-        self._loop_task = asyncio.create_task(self._session_loop())
 
     def _send_bytes(self, data: bytes):
         _LOGGER.debug(f"TX [{self.device.inet_address[0]}]: {data.hex()}")
@@ -81,8 +80,19 @@ class SyncleoConnection:
                 pass
 
     async def connect(self):
+        if self.state in (ConnectionState.CONNECTED, ConnectionState.CONNECTING):
+            _LOGGER.info(
+                "Connection to %s is already %s. Skipping connect().",
+                self.device.inet_address[0],
+                self.state.name,
+            )
+            return
+
         self._set_state(ConnectionState.CONNECTING)
         self.outseq = 0
+
+        if self._loop_task is None:
+            self._loop_task = asyncio.create_task(self._session_loop())
 
         _LOGGER.info(f"Initiating Handshake with {self.device.inet_address[0]}...")
 
@@ -95,7 +105,9 @@ class SyncleoConnection:
 
     def disconnect(self):
         self._set_state(ConnectionState.DISCONNECTED)
-        self._loop_task.cancel()
+        if self._loop_task:
+            self._loop_task.cancel()
+            self._loop_task = None
 
     async def _run_initialization(self, mode: int):
         await asyncio.sleep(0.5)
