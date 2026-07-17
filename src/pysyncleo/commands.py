@@ -212,10 +212,6 @@ class CmdTurbo(SyncleoBoolCommand):
     command_type = UdpCommandType.TURBO
 
 
-class CmdNight(SyncleoBoolCommand):
-    command_type = UdpCommandType.NIGHT
-
-
 class CmdAccessControl(SyncleoBoolCommand):
     command_type = UdpCommandType.ACCESS_CONTROL
 
@@ -226,6 +222,10 @@ class CmdVolume(SyncleoBoolCommand):
 
 class CmdMode(SyncleoByteCommand):
     command_type = UdpCommandType.MODE
+
+
+class CmdNight(SyncleoByteCommand):
+    command_type = UdpCommandType.NIGHT
 
 
 class CmdRecipeId(SyncleoByteCommand):
