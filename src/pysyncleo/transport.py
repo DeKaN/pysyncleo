@@ -91,7 +91,7 @@ class SyncleoConnection:
         self._set_state(ConnectionState.CONNECTING)
         self.outseq = 0
 
-        if self._loop_task is None:
+        if self._loop_task is None or self._loop_task.done():
             self._loop_task = asyncio.create_task(self._session_loop())
 
         _LOGGER.info(f"Initiating Handshake with {self.device.inet_address[0]}...")
