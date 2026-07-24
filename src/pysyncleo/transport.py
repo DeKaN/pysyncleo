@@ -147,6 +147,11 @@ class SyncleoConnection:
 
         try:
             seq, frame_type, payload = self.encoder.decode(data)
+        except ValueError as e:
+            _LOGGER.warning(
+                f"Discarding unreadable frame (stale key or stray packet): {e}"
+            )
+            return
         except Exception as e:
             _LOGGER.error(f"Failed to process frame: {e}")
             return

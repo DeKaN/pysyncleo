@@ -85,7 +85,9 @@ class CryptoV2Encoder(SyncleoEncoder):
         payload.extend(self.pubkey)
         payload.extend(encrypted_token)
 
-        return self._pack_header(seq=0, frame_type=FrameType.CMD, payload=payload)
+        return self._pack_header(
+            seq=0, frame_type=FrameType.CMD, payload=bytes(payload)
+        )
 
     def encode(self, seq: int, frame_type: FrameType, payload: bytes) -> bytes:
         i = seq & 0xF
