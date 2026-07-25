@@ -69,3 +69,18 @@ class DiagnosticStatus:
     gw_ping: int = 0
     gw_loss: int = 0
     mqtt_ping: int = 0
+
+
+@dataclass
+class MapBaseData:
+    x: int = 0
+    y: int = 0
+    angle: int = 0
+    is_deleted: bool = False
+
+
+@dataclass
+class MapLaserChunk:
+    chunk_id: int = 0
+    chunks_size: int = 0
+    data: bytes = b""

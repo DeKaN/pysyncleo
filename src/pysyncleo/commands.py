@@ -3,7 +3,7 @@ import struct
 from typing import Any, Dict, Optional, Tuple, Type
 
 from .enums import UdpCommandType
-from .models import DiagnosticStatus, OpenMqttConfig
+from .models import DiagnosticStatus, MapBaseData, MapLaserChunk, OpenMqttConfig
 from .utils import is_bit_enabled
 
 _LOGGER = logging.getLogger(__name__)
@@ -180,16 +180,8 @@ class SyncleoRawCommand(UdpCommand):
         self.value = payload
 
 
-class CmdKeepWarm(SyncleoBoolCommand):
-    command_type = UdpCommandType.KEEP_WARM
-
-
-class CmdIonization(SyncleoBoolCommand):
-    command_type = UdpCommandType.IONIZATION
-
-
-class CmdWarmStream(SyncleoBoolCommand):
-    command_type = UdpCommandType.WARM_STREAM
+class CmdAccessControl(SyncleoBoolCommand):
+    command_type = UdpCommandType.ACCESS_CONTROL
 
 
 class CmdBacklight(SyncleoBoolCommand):
@@ -200,8 +192,20 @@ class CmdChildLock(SyncleoBoolCommand):
     command_type = UdpCommandType.CHILD_LOCK
 
 
-class CmdUltraviolet(SyncleoBoolCommand):
-    command_type = UdpCommandType.ULTRAVIOLET
+class CmdFindMe(SyncleoBoolCommand):
+    command_type = UdpCommandType.FIND_ME
+
+
+class CmdKeepWarm(SyncleoBoolCommand):
+    command_type = UdpCommandType.KEEP_WARM
+
+
+class CmdIonization(SyncleoBoolCommand):
+    command_type = UdpCommandType.IONIZATION
+
+
+class CmdMapEdit(SyncleoBoolCommand):
+    command_type = UdpCommandType.MAP_EDIT
 
 
 class CmdSmartMode(SyncleoBoolCommand):
@@ -212,12 +216,16 @@ class CmdTurbo(SyncleoBoolCommand):
     command_type = UdpCommandType.TURBO
 
 
-class CmdAccessControl(SyncleoBoolCommand):
-    command_type = UdpCommandType.ACCESS_CONTROL
+class CmdUltraviolet(SyncleoBoolCommand):
+    command_type = UdpCommandType.ULTRAVIOLET
 
 
 class CmdVolume(SyncleoBoolCommand):
     command_type = UdpCommandType.VOLUME
+
+
+class CmdWarmStream(SyncleoBoolCommand):
+    command_type = UdpCommandType.WARM_STREAM
 
 
 class CmdMode(SyncleoByteCommand):
@@ -254,6 +262,10 @@ class CmdBattery(SyncleoByteCommand):
 
 class CmdBatteryState(SyncleoByteCommand):
     command_type = UdpCommandType.BATTERY_STATE
+
+
+class CmdCurrentUser(SyncleoByteCommand):
+    command_type = UdpCommandType.CURRENT_USER
 
 
 class CmdTank(SyncleoByteCommand):
@@ -300,12 +312,20 @@ class CmdAmperage(SyncleoShortCommand):
     command_type = UdpCommandType.CURRENT_AMPERAGE
 
 
-class CmdVoltage(SyncleoShortCommand):
-    command_type = UdpCommandType.VOLTAGE
+class CmdCleanTime(SyncleoShortCommand):
+    command_type = UdpCommandType.CLEAN_TIME
 
 
 class CmdDeviceType(SyncleoShortCommand):
     command_type = UdpCommandType.DEVICE_TYPE
+
+
+class CmdVoltage(SyncleoShortCommand):
+    command_type = UdpCommandType.VOLTAGE
+
+
+class CmdWeight(SyncleoShortCommand):
+    command_type = UdpCommandType.WEIGHT
 
 
 class CmdPlaceholder4(SyncleoShortCommand):
@@ -318,6 +338,18 @@ class CmdPlaceholder5(SyncleoShortCommand):
 
 class CmdPlaceholder6(SyncleoShortCommand):
     command_type = UdpCommandType.PLACEHOLDER_6
+
+
+class CmdCleanArea(SyncleoIntCommand):
+    command_type = UdpCommandType.CLEAN_AREA
+
+
+class CmdMapCurrent(SyncleoIntCommand):
+    command_type = UdpCommandType.CURRENT_MAP
+
+
+class CmdGyroscope(SyncleoIntCommand):
+    command_type = UdpCommandType.GYROSCOPE
 
 
 class CmdTargetTime(SyncleoIntCommand):
@@ -368,44 +400,96 @@ class CmdCurrentTemperature(SyncleoFloatCommand):
     command_type = UdpCommandType.TEMPERATURE
 
 
-class CmdJoystick(SyncleoRawCommand):
-    command_type = UdpCommandType.JOYSTICK
+class CmdCleanRooms(SyncleoRawCommand):
+    command_type = UdpCommandType.CLEAN_ROOMS
 
 
-class CmdMapData(SyncleoRawCommand):
-    command_type = UdpCommandType.MAP_DATA
-
-
-class CmdMultiStep(SyncleoRawCommand):
-    command_type = UdpCommandType.MULTI_STEP
+class CmdContour(SyncleoRawCommand):
+    command_type = UdpCommandType.CONTOUR
 
 
 class CmdDataSource(SyncleoRawCommand):
     command_type = UdpCommandType.DATA_SOURCE
 
 
-class CmdScheduleSet(SyncleoRawCommand):
-    command_type = UdpCommandType.SCHEDULE_SET
+class CmdDeviceDiagnostic(SyncleoRawCommand):
+    command_type = UdpCommandType.DEVICE_DIAGNOSTIC
 
 
-class CmdScheduleRemove(SyncleoRawCommand):
-    command_type = UdpCommandType.SCHEDULE_REMOVE
+class CmdFirmwareSlots(SyncleoRawCommand):
+    command_type = UdpCommandType.FIRMWARE_SLOTS
+
+
+class CmdFoundObjects(SyncleoRawCommand):
+    command_type = UdpCommandType.FOUND_OBJECTS
+
+
+class CmdGetUserList(SyncleoRawCommand):
+    command_type = UdpCommandType.GET_USER_LIST
+
+
+class CmdJoystick(SyncleoRawCommand):
+    command_type = UdpCommandType.JOYSTICK
+
+
+class CmdLang(SyncleoRawCommand):
+    command_type = UdpCommandType.LANG
+
+
+class CmdLocation(SyncleoRawCommand):
+    command_type = UdpCommandType.LOCATION
+
+
+class CmdLocationDelete(SyncleoRawCommand):
+    command_type = UdpCommandType.LOCATION_DELETE
+
+
+class CmdMapData(SyncleoRawCommand):
+    command_type = UdpCommandType.MAP_DATA
+
+
+class CmdMapFurniture(SyncleoRawCommand):
+    command_type = UdpCommandType.MAP_FURNITURE
+
+
+class CmdMapGoArea(SyncleoRawCommand):
+    command_type = UdpCommandType.MAP_GO_AREA
+
+
+class CmdMapLongData(SyncleoRawCommand):
+    command_type = UdpCommandType.MAP_LONG_DATA
+
+
+class CmdMapMcuFurniture(SyncleoRawCommand):
+    command_type = UdpCommandType.MAP_MCU_FURNITURE
+
+
+class CmdMapNoGoArea(SyncleoRawCommand):
+    command_type = UdpCommandType.MAP_NO_GO_AREA
+
+
+class CmdMapRooms(SyncleoRawCommand):
+    command_type = UdpCommandType.MAP_ROOMS
 
 
 class CmdMapTarget(SyncleoRawCommand):
     command_type = UdpCommandType.MAP_TARGET
 
 
-class CmdWifiList(SyncleoRawCommand):
-    command_type = UdpCommandType.WIFI_LIST
+class CmdMergeRooms(SyncleoRawCommand):
+    command_type = UdpCommandType.MERGE_ROOMS
 
 
-class CmdWifiStatus(SyncleoRawCommand):
-    command_type = UdpCommandType.WIFI_STATUS
+class CmdMultiStep(SyncleoRawCommand):
+    command_type = UdpCommandType.MULTI_STEP
 
 
-class CmdDeviceDiagnostic(SyncleoRawCommand):
-    command_type = UdpCommandType.DEVICE_DIAGNOSTIC
+class CmdNotification(SyncleoRawCommand):
+    command_type = UdpCommandType.NOTIFICATION
+
+
+class CmdProxyData(SyncleoRawCommand):
+    command_type = UdpCommandType.PROXY_DATA
 
 
 class CmdProxyDevices(SyncleoRawCommand):
@@ -416,8 +500,40 @@ class CmdProxyLink(SyncleoRawCommand):
     command_type = UdpCommandType.PROXY_LINK
 
 
-class CmdProxyData(SyncleoRawCommand):
-    command_type = UdpCommandType.PROXY_DATA
+class CmdScheduleSet(SyncleoRawCommand):
+    command_type = UdpCommandType.SCHEDULE_SET
+
+
+class CmdScheduleRemove(SyncleoRawCommand):
+    command_type = UdpCommandType.SCHEDULE_REMOVE
+
+
+class CmdSmartButton(SyncleoRawCommand):
+    command_type = UdpCommandType.SMART_BUTTON
+
+
+class CmdSplitRoom(SyncleoRawCommand):
+    command_type = UdpCommandType.SPLIT_ROOM
+
+
+class CmdUpdateUser(SyncleoRawCommand):
+    command_type = UdpCommandType.UPDATE_USER
+
+
+class CmdUserProgramData(SyncleoRawCommand):
+    command_type = UdpCommandType.USER_PROGRAM_DATA
+
+
+class CmdVirtualWall(SyncleoRawCommand):
+    command_type = UdpCommandType.VIRTUAL_WALL
+
+
+class CmdWifiList(SyncleoRawCommand):
+    command_type = UdpCommandType.WIFI_LIST
+
+
+class CmdWifiStatus(SyncleoRawCommand):
+    command_type = UdpCommandType.WIFI_STATUS
 
 
 class CmdHandshake(UdpCommand):
@@ -613,8 +729,48 @@ class CmdInitDiagnostic(UdpCommand):
             self.value = self.status
 
 
+class CmdBaseMap(UdpCommand):
+    command_type = UdpCommandType.BASE_MAP
+
+    def __init__(self, value: Optional[MapBaseData] = None):
+        super().__init__(value or MapBaseData())
+
+    def deserialize(self, payload: bytes) -> None:
+        if len(payload) == 6:
+            x, y, angle = struct.unpack("<hhh", payload)
+            self.value = MapBaseData(x, y, angle - 90, False)
+        else:
+            self.value = MapBaseData(is_deleted=True)
+
+
+class CmdMapAngle(SyncleoShortCommand):
+    command_type = UdpCommandType.MAP_ANGLE
+
+    def deserialize(self, payload: bytes) -> None:
+        if len(payload) > 0:
+            self.value = int.from_bytes(payload, byteorder="little", signed=False) % 360
+
+
+class CmdMapLazer(UdpCommand):
+    command_type = UdpCommandType.MAP_LASER
+
+    def __init__(self, chunk: Optional[MapLaserChunk] = None):
+        super().__init__(chunk or MapLaserChunk())
+
+    def deserialize(self, payload: bytes) -> None:
+        if len(payload) > 2:
+            self.value = MapLaserChunk(payload[0], payload[1], payload[2:])
+
+
 class CmdPing(UdpCommand):
     command_type = UdpCommandType.PING
+
+    def __init__(self):
+        super().__init__(None)
+
+
+class CmdVideoStreamPing(UdpCommand):
+    command_type = UdpCommandType.VIDEO_STREAM_PING
 
     def __init__(self):
         super().__init__(None)

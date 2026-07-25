@@ -150,8 +150,7 @@ class CryptoV2Encoder(SyncleoEncoder):
             unpadder = padding.PKCS7(aes.block_size).unpadder()
             plaintext = unpadder.update(decrypted) + unpadder.finalize()
         except Exception as e:
-            _LOGGER.warning("Failed to decrypt frame seq=%d: %s", seq, e)
-            raise
+            raise ValueError(f"Failed to decrypt frame seq={seq}: {e}") from e
 
         _LOGGER.debug("Decrypted result: [%s]", plaintext.hex())
 

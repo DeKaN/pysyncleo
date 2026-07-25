@@ -148,9 +148,14 @@ class SyncleoConnection:
         try:
             seq, frame_type, payload = self.encoder.decode(data)
         except ValueError as e:
-            _LOGGER.warning(
-                f"Discarding unreadable frame (stale key or stray packet): {e}"
-            )
+            if self.state == ConnectionState.CONNECTED:
+                _LOGGER.warning(
+                    f"Discarding unreadable frame (stale key or stray packet): {e}"
+                )
+            else:
+                _LOGGER.debug(
+                    f"Discarding unreadable frame during when state {self.state}: {e}"
+                )
             return
         except Exception as e:
             _LOGGER.error(f"Failed to process frame: {e}")
@@ -171,25 +176,27 @@ class SyncleoConnection:
             if not parsed_cmd:
                 return
 
-            if (
-                isinstance(parsed_cmd, CmdHandshake)
-                and self.state == ConnectionState.CONNECTING
-            ):
+            if self.state == ConnectionState.CONNECTING:
                 self._set_state(ConnectionState.CONNECTED)
                 self._reconnect_attempts = 0
-
-                _LOGGER.info(
-                    f"Device Connected! "
-                    f"Protocol: v{parsed_cmd.protocol_version} | "
-                    f"Firmware: {parsed_cmd.fw_major}.{parsed_cmd.fw_minor} | "
-                    f"Mode: {parsed_cmd.mode}"
-                )
 
                 if 0 in self._unacked_seq:
                     del self._unacked_seq[0]
 
-                asyncio.create_task(self._run_initialization(parsed_cmd.mode))
-                return
+                if isinstance(parsed_cmd, CmdHandshake):
+                    _LOGGER.info(
+                        f"Device Connected! "
+                        f"Protocol: v{parsed_cmd.protocol_version} | "
+                        f"Firmware: {parsed_cmd.fw_major}.{parsed_cmd.fw_minor} | "
+                        f"Mode: {parsed_cmd.mode}"
+                    )
+                    asyncio.create_task(self._run_initialization(parsed_cmd.mode))
+                    return
+                else:
+                    _LOGGER.info(
+                        f"Device reconnected without handshake. We got command {parsed_cmd}"
+                    )
+                    asyncio.create_task(self._run_initialization(1))
 
             if parsed_cmd.command_type in (
                 UdpCommandType.PING,
