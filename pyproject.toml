@@ -1,6 +1,6 @@
 [project]
 name = "pysyncleo"
-version = "0.3.0"
+version = "0.3.1"
 description = "Basic library for working with Syncleo UDP devices"
 readme = "README.md"
 authors = [

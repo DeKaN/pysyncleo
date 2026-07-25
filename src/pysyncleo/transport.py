@@ -161,7 +161,7 @@ class SyncleoConnection:
             _LOGGER.error(f"Failed to process frame: {e}")
             return
 
-        self.inseq = seq
+        self.outseq = self.inseq = seq
 
         if frame_type == FrameType.ACK:
             if seq in self._unacked_seq:
