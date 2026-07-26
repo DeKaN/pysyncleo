@@ -177,13 +177,13 @@ class SyncleoConnection:
                 return
 
             if self.state == ConnectionState.CONNECTING:
-                self._set_state(ConnectionState.CONNECTED)
-                self._reconnect_attempts = 0
-
                 self.outseq = seq
 
                 if 0 in self._unacked_seq:
                     del self._unacked_seq[0]
+
+                self._reconnect_attempts = 0
+                self._set_state(ConnectionState.CONNECTED)
 
                 if isinstance(parsed_cmd, CmdHandshake):
                     _LOGGER.info(
