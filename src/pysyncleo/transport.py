@@ -169,22 +169,15 @@ class SyncleoConnection:
             return
 
         if frame_type == FrameType.CMD:
+            should_ignore = False
             ack_frame = self.encoder.encode(seq, FrameType.ACK, b"")
-            self._send_bytes(ack_frame)
 
             parsed_cmd = UdpCommand.from_bytes(payload)
             if not parsed_cmd:
+                self._send_bytes(ack_frame)
                 return
 
             if self.state == ConnectionState.CONNECTING:
-                self.outseq = seq
-
-                if 0 in self._unacked_seq:
-                    del self._unacked_seq[0]
-
-                self._reconnect_attempts = 0
-                self._set_state(ConnectionState.CONNECTED)
-
                 if isinstance(parsed_cmd, CmdHandshake):
                     _LOGGER.info(
                         f"Device Connected! "
@@ -192,13 +185,23 @@ class SyncleoConnection:
                         f"Firmware: {parsed_cmd.fw_major}.{parsed_cmd.fw_minor} | "
                         f"Mode: {parsed_cmd.mode}"
                     )
+                    self._send_bytes(ack_frame)
+                    if 0 in self._unacked_seq:
+                        del self._unacked_seq[0]
+
+                    self._reconnect_attempts = 0
+                    self._set_state(ConnectionState.CONNECTED)
+
                     asyncio.create_task(self._run_initialization(parsed_cmd.mode))
                     return
                 else:
                     _LOGGER.info(
-                        f"Device reconnected without handshake. We got command {parsed_cmd}"
+                        f"Device sent command {parsed_cmd} while we are in connecting state. Ignoring..."
                     )
-                    asyncio.create_task(self._run_initialization(1))
+                    should_ignore = True
+
+            if not should_ignore:
+                self._send_bytes(ack_frame)
 
             if parsed_cmd.command_type in (
                 UdpCommandType.PING,
