@@ -3,7 +3,13 @@ import struct
 from typing import Any, Dict, Optional, Tuple, Type
 
 from .enums import UdpCommandType
-from .models import DiagnosticStatus, MapBaseData, MapLaserChunk, OpenMqttConfig
+from .models import (
+    DataSource,
+    DiagnosticStatus,
+    MapBaseData,
+    MapLaserChunk,
+    OpenMqttConfig,
+)
 from .utils import is_bit_enabled
 
 _LOGGER = logging.getLogger(__name__)
@@ -408,10 +414,6 @@ class CmdContour(SyncleoRawCommand):
     command_type = UdpCommandType.CONTOUR
 
 
-class CmdDataSource(SyncleoRawCommand):
-    command_type = UdpCommandType.DATA_SOURCE
-
-
 class CmdDeviceDiagnostic(SyncleoRawCommand):
     command_type = UdpCommandType.DEVICE_DIAGNOSTIC
 
@@ -566,6 +568,76 @@ class CmdTimeSync(SyncleoCompositeCommand):
 
     def serialize(self) -> bytes:
         return struct.pack("<Ih", int(self.value[0]), int(self.value[1]))
+
+
+class CmdDataSource(UdpCommand):
+    command_type = UdpCommandType.DATA_SOURCE
+    _MAC_LENGTH = 6
+    _FEATURE_PAYLOAD_SIZE = 14
+    _EMPTY_MAC = b"\x00" * _MAC_LENGTH
+    _FORMAT = f"<{_MAC_LENGTH}s{_MAC_LENGTH}sH"
+
+    def __init__(
+        self, subscribe_features: Optional[Dict[str, Optional[DataSource]]] = None
+    ):
+        self.subscribe_features = {}
+        super().__init__(subscribe_features or {})
+
+    def serialize(self) -> bytes:
+        payload = bytearray()
+        for feature in self.supported_features:
+            source = self.subscribe_features.get(feature)
+
+            if source is None:
+                payload.extend(b"\x00" * self._FEATURE_PAYLOAD_SIZE)
+                continue
+
+            mac = bytes.fromhex(source.mac.replace(":", ""))
+            if not source.host:
+                first_address = mac
+                second_address = self._EMPTY_MAC
+            else:
+                first_address = bytes.fromhex(source.host.replace(":", ""))
+                second_address = mac
+
+            payload.extend(
+                struct.pack(
+                    self._FORMAT, first_address, second_address, source.device_type
+                )
+            )
+
+        self.value = bytes(payload)
+        return self.value
+
+    def deserialize(self, payload: bytes) -> None:
+        self.value = payload
+        self.subscribe_features = {}
+
+        for i, feature in enumerate(self.supported_features):
+            offset = i * self._FEATURE_PAYLOAD_SIZE
+
+            if offset + self._FEATURE_PAYLOAD_SIZE > len(payload):
+                break
+
+            chunk = payload[offset : offset + self._FEATURE_PAYLOAD_SIZE]
+            first_address, second_address, device_type = struct.unpack(
+                self._FORMAT, chunk
+            )
+
+            if first_address == self._EMPTY_MAC and second_address == self._EMPTY_MAC:
+                source = None
+            elif second_address == self._EMPTY_MAC:
+                source = DataSource(
+                    mac=first_address.hex(), device_type=device_type, host=None
+                )
+            else:
+                source = DataSource(
+                    mac=second_address.hex(),
+                    device_type=device_type,
+                    host=first_address.hex(),
+                )
+
+            self.subscribe_features[feature] = source
 
 
 class CmdExpendables(SyncleoCompositeCommand):

@@ -72,6 +72,13 @@ class DiagnosticStatus:
 
 
 @dataclass
+class DataSource:
+    mac: str
+    device_type: int
+    host: Optional[str] = None
+
+
+@dataclass
 class MapBaseData:
     x: int = 0
     y: int = 0
