@@ -1,6 +1,6 @@
 import logging
 import struct
-from typing import Any, Dict, Optional, Tuple, Type
+from typing import Any, Dict, List, Optional, Tuple, Type
 
 from .enums import UdpCommandType
 from .models import (
@@ -8,6 +8,7 @@ from .models import (
     DiagnosticStatus,
     MapBaseData,
     MapLaserChunk,
+    MultiStep,
     OpenMqttConfig,
 )
 from .utils import is_bit_enabled
@@ -482,8 +483,80 @@ class CmdMergeRooms(SyncleoRawCommand):
     command_type = UdpCommandType.MERGE_ROOMS
 
 
-class CmdMultiStep(SyncleoRawCommand):
+class CmdMultiStep(UdpCommand):
     command_type = UdpCommandType.MULTI_STEP
+
+    def __init__(self, step_data: Optional[MultiStep] = None):
+        super().__init__(step_data or MultiStep())
+        self.programs_level: int = 0
+        self.feature_sizes: Dict[str, int] = {}
+        self._raw_tail: bytes = b""
+
+    @property
+    def step_data(self) -> MultiStep:
+        return self.value
+
+    def set_profile(self, programs_level: int, feature_sizes: Dict[str, int]) -> None:
+        """
+        Configures the byte sizes for serialization and parses any pending raw bytes.
+        :param feature_sizes: An ordered dict of {feature_name: byte_size} provided by the client.
+        """
+        self.programs_level = programs_level
+        self.feature_sizes = feature_sizes
+
+        if isinstance(self.value, MultiStep) and self._raw_tail:
+            tail = self._raw_tail
+            self.value.program = tail[:programs_level]
+            offset = programs_level
+
+            for feature, size in feature_sizes.items():
+                if offset + size > len(tail):
+                    break
+
+                chunk = tail[offset : offset + size]
+                self.value.values[feature] = int.from_bytes(
+                    chunk[:size], byteorder="little", signed=False
+                )
+                offset += size
+
+            self._raw_tail = b""
+
+    def serialize(self) -> bytes:
+        payload = bytearray()
+        data = self.value
+
+        payload.append(data.flags & 0xFF)
+        payload.append(data.total_steps & 0xFF)
+        payload.append(data.step & 0xFF)
+
+        prog = data.program
+        if len(prog) < self.programs_level:
+            prog += b"\x00" * (self.programs_level - len(prog))
+        elif len(prog) > self.programs_level:
+            prog = prog[: self.programs_level]
+        payload.extend(prog)
+
+        for feature, size in self.feature_sizes.items():
+            val = data.values.get(feature, 0)
+            mask = (1 << (size * 8)) - 1
+            payload.extend(
+                (val & mask).to_bytes(size, byteorder="little", signed=False)
+            )
+
+        return bytes(payload)
+
+    def deserialize(self, payload: bytes) -> None:
+        if len(payload) < 3:
+            return
+
+        self._raw_tail = payload[3:]
+        self.value = MultiStep(
+            flags=payload[0],
+            total_steps=payload[1],
+            step=payload[2],
+            program=b"",
+            values={},
+        )
 
 
 class CmdNotification(SyncleoRawCommand):
@@ -580,14 +653,12 @@ class CmdDataSource(UdpCommand):
     def __init__(
         self, subscribe_features: Optional[Dict[str, Optional[DataSource]]] = None
     ):
-        self.subscribe_features = {}
         super().__init__(subscribe_features or {})
 
     def serialize(self) -> bytes:
         payload = bytearray()
-        for feature in self.supported_features:
-            source = self.subscribe_features.get(feature)
 
+        for source in self.value.values():
             if source is None:
                 payload.extend(b"\x00" * self._FEATURE_PAYLOAD_SIZE)
                 continue
@@ -606,14 +677,16 @@ class CmdDataSource(UdpCommand):
                 )
             )
 
-        self.value = bytes(payload)
-        return self.value
+        return bytes(payload)
 
     def deserialize(self, payload: bytes) -> None:
-        self.value = payload
-        self.subscribe_features = {}
+        if not self.value:
+            num_features = len(payload) // self._FEATURE_PAYLOAD_SIZE
+            self.value: Dict[str, Optional[DataSource]] = {
+                f"feature_{i}": None for i in range(num_features)
+            }
 
-        for i, feature in enumerate(self.supported_features):
+        for i, feature in enumerate(list(self.value.keys())):
             offset = i * self._FEATURE_PAYLOAD_SIZE
 
             if offset + self._FEATURE_PAYLOAD_SIZE > len(payload):
@@ -637,7 +710,21 @@ class CmdDataSource(UdpCommand):
                     host=first_address.hex(),
                 )
 
-            self.subscribe_features[feature] = source
+            self.value[feature] = source
+
+    def map_features(self, supported_features: List[str]) -> None:
+        """
+        Re-maps the parsed payload to the actual device feature keys.
+        Call this after deserialization once the device profile is known.
+        """
+        current_sources = list(self.value.values())
+
+        new_value = {
+            feature: current_sources[i] if i < len(current_sources) else None
+            for i, feature in enumerate(supported_features)
+        }
+
+        self.value = new_value
 
 
 class CmdExpendables(SyncleoCompositeCommand):

@@ -1,6 +1,6 @@
 from dataclasses import dataclass, field
 import logging
-from typing import Any, Optional, Tuple
+from typing import Any, Dict, Optional, Tuple
 
 from .utils import format_mac_address
 
@@ -76,6 +76,15 @@ class DataSource:
     mac: str
     device_type: int
     host: Optional[str] = None
+
+
+@dataclass
+class MultiStep:
+    flags: int = 0
+    total_steps: int = 0
+    step: int = 0
+    program: bytes = b""
+    values: Dict[str, int] = field(default_factory=dict)
 
 
 @dataclass
