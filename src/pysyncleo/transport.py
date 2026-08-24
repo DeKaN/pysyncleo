@@ -1,8 +1,9 @@
 import asyncio
-import time
 import logging
-from typing import Callable, Dict, Optional, Tuple
+import time
+from collections.abc import Callable
 
+from .commands import CmdHandshake, CmdInitDiagnostic, CmdPing, CmdTimeSync, UdpCommand
 from .const import (
     MAX_RECONNECT_ATTEMPTS,
     MAX_SEND_RETRIES,
@@ -10,12 +11,9 @@ from .const import (
     RECONNECT_INTERVAL,
     RETRY_TIMEOUT,
 )
-
-from .commands import CmdHandshake, CmdInitDiagnostic, CmdPing, CmdTimeSync, UdpCommand
 from .encoding import CryptoV2Encoder, PlainEncoder
 from .enums import ConnectionState, FrameType, UdpCommandType
 from .models import SyncleoUdpDevice, UnackedMessage
-
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -28,18 +26,18 @@ class SyncleoConnection:
 
         self.inseq = 0
         self.outseq = 0
-        self._unacked_seq: Dict[int, UnackedMessage] = {}
+        self._unacked_seq: dict[int, UnackedMessage] = {}
         self._callbacks: set[Callable[[UdpCommand], None]] = set()
         self._state_callbacks: set[Callable[[ConnectionState], None]] = set()
-        self._loop_task = None
+        self._loop_task: asyncio.Task | None = None
         self._last_activity = time.monotonic()
-        self._last_reconnect_attempt = 0
+        self._last_reconnect_attempt = 0.0
         self._reconnect_attempts = 0
-
-        if self.device.protocol < 2:
-            self.encoder = PlainEncoder(self.device)
-        else:
-            self.encoder = CryptoV2Encoder(self.device)
+        self.encoder = (
+            PlainEncoder(self.device)
+            if self.device.protocol < 2
+            else CryptoV2Encoder(self.device)
+        )
 
     def _send_bytes(self, data: bytes):
         _LOGGER.debug(f"TX [{self.device.inet_address[0]}]: {data.hex()}")
@@ -68,16 +66,15 @@ class SyncleoConnection:
             for callback in self._state_callbacks:
                 try:
                     callback(new_state)
-                except Exception as e:
+                except Exception as e:  # noqa: BLE001
                     _LOGGER.warning(f"Error in state callback {callback}: {e}")
 
     def _notify_callbacks(self, cmd: UdpCommand) -> None:
         for callback in self._callbacks:
             try:
                 callback(cmd)
-            except Exception as e:
+            except Exception as e:  # noqa: BLE001
                 _LOGGER.warning(f"Error in callback {callback}: {e}")
-                pass
 
     async def connect(self):
         if self.state in (ConnectionState.CONNECTED, ConnectionState.CONNECTING):
@@ -157,7 +154,7 @@ class SyncleoConnection:
                     f"Discarding unreadable frame during when state {self.state}: {e}"
                 )
             return
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001
             _LOGGER.error(f"Failed to process frame: {e}")
             return
 
@@ -278,7 +275,7 @@ class SyncleoConnection:
 
             except asyncio.CancelledError:
                 break
-            except Exception as e:
+            except Exception as e:  # noqa: BLE001
                 _LOGGER.error(
                     f"Error in session loop for device {self.device.inet_address[0]}: {e}"
                 )
@@ -289,18 +286,18 @@ class SyncleoConnection:
 class TransportManager(asyncio.DatagramProtocol):
     def __init__(self):
         self.transport = None
-        self.devices: Dict[Tuple[str, int], SyncleoUdpDevice] = {}
-        self.connections: Dict[Tuple[str, int], SyncleoConnection] = {}
+        self.devices: dict[tuple[str, int], SyncleoUdpDevice] = {}
+        self.connections: dict[tuple[str, int], SyncleoConnection] = {}
 
     def connection_made(self, transport):
         self.transport = transport
         _LOGGER.info("Syncleo Transport Bound.")
 
-    def datagram_received(self, data: bytes, addr: Tuple[str, int]):
+    def datagram_received(self, data: bytes, addr: tuple[str, int]):
         if addr in self.connections:
             self.connections[addr].feed_datagram(data)
 
-    def register_device(self, device: SyncleoUdpDevice) -> Optional[SyncleoConnection]:
+    def register_device(self, device: SyncleoUdpDevice) -> SyncleoConnection | None:
         if self.transport is None:
             _LOGGER.error(
                 f"Cannot register {device.mac_address}: UDP socket is not bound yet!"

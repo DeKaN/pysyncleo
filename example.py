@@ -1,6 +1,5 @@
 import asyncio
 import logging
-from typing import Dict
 
 from zeroconf import ServiceStateChange
 from zeroconf.asyncio import AsyncServiceBrowser, AsyncServiceInfo, AsyncZeroconf
@@ -90,7 +89,7 @@ async def main():
     )
 
     _LOGGER.info("🔍 Searching for Syncleo devices on the local network...")
-    active_connections: Dict[str, "SyncleoConnection"] = {}
+    active_connections: dict[str, SyncleoConnection] = {}
 
     try:
         while True:

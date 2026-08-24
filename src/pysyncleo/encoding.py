@@ -1,15 +1,14 @@
 import logging
 import struct
-from typing import Tuple
 
+import cryptography.hazmat.primitives.serialization as srlz
+from cryptography.hazmat.primitives import ciphers, hashes, padding
 from cryptography.hazmat.primitives.asymmetric.x25519 import (
     X25519PrivateKey,
     X25519PublicKey,
 )
-from cryptography.hazmat.primitives import ciphers, padding, hashes
 from cryptography.hazmat.primitives.ciphers.algorithms import AES
 from cryptography.hazmat.primitives.ciphers.modes import CBC
-import cryptography.hazmat.primitives.serialization as srlz
 
 from .enums import FrameType, UdpCommandType
 
@@ -26,7 +25,7 @@ class SyncleoEncoder:
     def encode(self, seq: int, frame_type: FrameType, payload: bytes) -> bytes:
         raise NotImplementedError
 
-    def decode(self, data: bytes) -> Tuple[int, FrameType, bytes]:
+    def decode(self, data: bytes) -> tuple[int, FrameType, bytes]:
         raise NotImplementedError
 
     def _pack_header(self, seq: int, frame_type: FrameType, payload: bytes) -> bytes:
@@ -41,7 +40,7 @@ class PlainEncoder(SyncleoEncoder):
     def encode(self, seq: int, frame_type: FrameType, payload: bytes) -> bytes:
         return self._pack_header(seq, frame_type, payload)
 
-    def decode(self, data: bytes) -> Tuple[int, FrameType, bytes]:
+    def decode(self, data: bytes) -> tuple[int, FrameType, bytes]:
         if len(data) < 4:
             raise ValueError("Frame too short")
 
@@ -116,7 +115,7 @@ class CryptoV2Encoder(SyncleoEncoder):
 
         return self._pack_header(seq, frame_type, ciphertext)
 
-    def decode(self, data: bytes) -> Tuple[int, FrameType, bytes]:
+    def decode(self, data: bytes) -> tuple[int, FrameType, bytes]:
         if len(data) < 4:
             raise ValueError("Frame too short")
 

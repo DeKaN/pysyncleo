@@ -14,19 +14,34 @@ jobs:
     runs-on: "ubuntu-latest"
     steps:
         - name: "Checkout the repository"
-          uses: "actions/checkout@v6"
+          uses: "actions/checkout@v7"
 
-        - name: "Install uv"
-          uses: astral-sh/setup-uv@v8.2.0
+        - name: Ruff Check
+          uses: astral-sh/ruff-action@v4.1.0
+          with:
+            args: check --output-format=github
+
+        - name: Ruff Format
+          uses: astral-sh/ruff-action@v4.1.0
+          with:
+            args: format --check --diff
+  mypy:
+    runs-on: ubuntu-latest
+
+    steps:
+        - name: Checkout code
+          uses: actions/checkout@v7
+
+        - name: Install uv
+          uses: astral-sh/setup-uv@v10.0.1
           with:
             enable-cache: true
-            cache-dependency-glob: "uv.lock"
 
-        - name: "Install requirements"
-          run: uv sync --all-extras --dev
+        - name: Set up Python
+          run: uv python install
 
-        - name: "Lint"
-          run: uv run ruff check .
+        - name: Install dependencies
+          run: uv sync
 
-        - name: "Format"
-          run: uv run ruff format . --check
+        - name: Run mypy
+          run: uv run mypy src/pysyncleo/ --check-untyped-defs

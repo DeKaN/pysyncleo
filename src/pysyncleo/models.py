@@ -1,9 +1,8 @@
-from dataclasses import dataclass, field
 import logging
-from typing import Any, Dict, Optional, Tuple
+from dataclasses import dataclass, field
+from typing import Any
 
 from .utils import format_mac_address
-
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -18,17 +17,15 @@ class UnackedMessage:
 @dataclass
 class SyncleoUdpDevice:
     mac_address: str
-    inet_address: Tuple[str, int]
+    inet_address: tuple[str, int]
     vendor: str = "Unknown"
     device_type: int = 0
     protocol: int = 1
     device_token: bytes = field(default_factory=lambda: b"\x00" * 16)
-    device_pubkey: Optional[bytes] = None
+    device_pubkey: bytes | None = None
 
     @classmethod
-    def from_zeroconf(
-        cls, ip: str, port: int, txt: dict[str, Any]
-    ) -> "SyncleoUdpDevice":
+    def from_zeroconf(cls, ip: str, port: int, txt: dict[str, Any]) -> SyncleoUdpDevice:
         mac = format_mac_address(txt.get("mac", "00:00:00:00:00:00"))
         vendor = txt.get("vendor", "Unknown")
         device_type = int(txt.get("devtype", 0))
@@ -75,7 +72,7 @@ class DiagnosticStatus:
 class DataSource:
     mac: str
     device_type: int
-    host: Optional[str] = None
+    host: str | None = None
 
 
 @dataclass
@@ -84,7 +81,7 @@ class MultiStep:
     total_steps: int = 0
     step: int = 0
     program: bytes = b""
-    values: Dict[str, int] = field(default_factory=dict)
+    values: dict[str, int] = field(default_factory=dict)
 
 
 @dataclass

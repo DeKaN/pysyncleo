@@ -1,6 +1,6 @@
 import logging
 import struct
-from typing import Any, Dict, List, Optional, Tuple, Type
+from typing import Any, ClassVar
 
 from .enums import UdpCommandType
 from .models import (
@@ -17,9 +17,9 @@ _LOGGER = logging.getLogger(__name__)
 
 
 class UdpCommand:
-    command_type: Optional[UdpCommandType] = None
+    command_type: UdpCommandType | None = None
 
-    COMMAND_REGISTRY: Dict[UdpCommandType, Type["UdpCommand"]] = {}
+    COMMAND_REGISTRY: ClassVar[dict[UdpCommandType, type[UdpCommand]]] = {}
 
     def __init_subclass__(cls, **kwargs):
         super().__init_subclass__(**kwargs)
@@ -52,7 +52,7 @@ class UdpCommand:
         pass
 
     @classmethod
-    def from_bytes(cls, payload: bytes) -> Optional["UdpCommand"]:
+    def from_bytes(cls, payload: bytes) -> UdpCommand | None:
         if not payload:
             return None
 
@@ -146,7 +146,7 @@ class SyncleoFloatCommand(UdpCommand):
         val = float(self.value)
         int_part = int(abs(val))
 
-        frac_part = int(round((abs(val) - int_part) * 100))
+        frac_part = round((abs(val) - int_part) * 100)
 
         if val < 0:
             frac_part |= 0x80
@@ -486,17 +486,17 @@ class CmdMergeRooms(SyncleoRawCommand):
 class CmdMultiStep(UdpCommand):
     command_type = UdpCommandType.MULTI_STEP
 
-    def __init__(self, step_data: Optional[MultiStep] = None):
+    def __init__(self, step_data: MultiStep | None = None):
         super().__init__(step_data or MultiStep())
         self.programs_level: int = 0
-        self.feature_sizes: Dict[str, int] = {}
+        self.feature_sizes: dict[str, int] = {}
         self._raw_tail: bytes = b""
 
     @property
     def step_data(self) -> MultiStep:
         return self.value
 
-    def set_profile(self, programs_level: int, feature_sizes: Dict[str, int]) -> None:
+    def set_profile(self, programs_level: int, feature_sizes: dict[str, int]) -> None:
         """
         Configures the byte sizes for serialization and parses any pending raw bytes.
         :param feature_sizes: An ordered dict of {feature_name: byte_size} provided by the client.
@@ -650,9 +650,7 @@ class CmdDataSource(UdpCommand):
     _EMPTY_MAC = b"\x00" * _MAC_LENGTH
     _FORMAT = f"<{_MAC_LENGTH}s{_MAC_LENGTH}sH"
 
-    def __init__(
-        self, subscribe_features: Optional[Dict[str, Optional[DataSource]]] = None
-    ):
+    def __init__(self, subscribe_features: dict[str, DataSource | None] | None = None):
         super().__init__(subscribe_features or {})
 
     def serialize(self) -> bytes:
@@ -682,7 +680,7 @@ class CmdDataSource(UdpCommand):
     def deserialize(self, payload: bytes) -> None:
         if not self.value:
             num_features = len(payload) // self._FEATURE_PAYLOAD_SIZE
-            self.value: Dict[str, Optional[DataSource]] = {
+            self.value: dict[str, DataSource | None] = {
                 f"feature_{i}": None for i in range(num_features)
             }
 
@@ -701,18 +699,18 @@ class CmdDataSource(UdpCommand):
                 source = None
             elif second_address == self._EMPTY_MAC:
                 source = DataSource(
-                    mac=first_address.hex(), device_type=device_type, host=None
+                    mac=first_address.hex(":"), device_type=device_type, host=None
                 )
             else:
                 source = DataSource(
-                    mac=second_address.hex(),
+                    mac=second_address.hex(":"),
                     device_type=device_type,
                     host=first_address.hex(),
                 )
 
             self.value[feature] = source
 
-    def map_features(self, supported_features: List[str]) -> None:
+    def map_features(self, supported_features: list[str]) -> None:
         """
         Re-maps the parsed payload to the actual device feature keys.
         Call this after deserialization once the device profile is known.
@@ -754,7 +752,7 @@ class CmdExpendables(SyncleoCompositeCommand):
 class CmdOpenMqtt(UdpCommand):
     command_type = UdpCommandType.OPEN_MQTT
 
-    def __init__(self, config: Optional[OpenMqttConfig] = None):
+    def __init__(self, config: OpenMqttConfig | None = None):
         super().__init__(config or OpenMqttConfig())
 
     def serialize(self) -> bytes:
@@ -784,7 +782,7 @@ class CmdOpenMqtt(UdpCommand):
         secure_byte, port = struct.unpack_from("<BH", payload, 0)
         ptr = 3
 
-        def read_string(p: int) -> Tuple[str, int]:
+        def read_string(p: int) -> tuple[str, int]:
             if p >= len(payload):
                 return "", p
             length = payload[p]
@@ -847,7 +845,7 @@ class CmdInitDiagnostic(UdpCommand):
     def __init__(self, mode: int = 0, ssid: str = ""):
         self.mode = mode
         self.ssid = ssid
-        self.status: Optional[DiagnosticStatus] = None
+        self.status: DiagnosticStatus | None = None
         super().__init__(mode)
 
     def serialize(self) -> bytes:
@@ -891,7 +889,7 @@ class CmdInitDiagnostic(UdpCommand):
 class CmdBaseMap(UdpCommand):
     command_type = UdpCommandType.BASE_MAP
 
-    def __init__(self, value: Optional[MapBaseData] = None):
+    def __init__(self, value: MapBaseData | None = None):
         super().__init__(value or MapBaseData())
 
     def deserialize(self, payload: bytes) -> None:
@@ -913,7 +911,7 @@ class CmdMapAngle(SyncleoShortCommand):
 class CmdMapLazer(UdpCommand):
     command_type = UdpCommandType.MAP_LASER
 
-    def __init__(self, chunk: Optional[MapLaserChunk] = None):
+    def __init__(self, chunk: MapLaserChunk | None = None):
         super().__init__(chunk or MapLaserChunk())
 
     def deserialize(self, payload: bytes) -> None:

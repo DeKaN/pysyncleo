@@ -1,6 +1,6 @@
 [project]
 name = "pysyncleo"
-version = "0.3.6"
+version = "0.3.7"
 description = "Basic library for working with Syncleo UDP devices"
 readme = "README.md"
 authors = [
@@ -28,7 +28,14 @@ build-backend = "hatchling.build"
 
 [dependency-groups]
 dev = [
-    "pre-commit>=4.5.1",
-    "ruff>=0.15.5",
+    "mypy==1.20.2",
+    "pre-commit>=4.6.2",
+    "ruff>=0.16.4",
     "zeroconf>=0.149.16"
 ]
+[tool.mypy]
+python_version = "3.14"
+platform = "linux"
+follow_imports = "normal"
+ignore_missing_imports = true
+check_untyped_defs = true
