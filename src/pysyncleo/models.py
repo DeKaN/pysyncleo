@@ -52,6 +52,14 @@ class OpenMqttConfig:
     enabled: bool = False
 
 
+@dataclass(frozen=True)
+class CustomCommandField:
+    """Schema definition for parsing custom command payloads."""
+
+    name: str
+    size: int
+
+
 @dataclass
 class DiagnosticStatus:
     """Detailed health report returned by the appliance."""

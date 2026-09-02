@@ -4,6 +4,7 @@ from typing import Any, ClassVar
 
 from .enums import UdpCommandType
 from .models import (
+    CustomCommandField,
     DataSource,
     DiagnosticStatus,
     MapBaseData,
@@ -185,6 +186,24 @@ class SyncleoRawCommand(UdpCommand):
 
     def deserialize(self, payload: bytes) -> None:
         self.value = payload
+
+
+class DeferredMappingCommand[T_Schema](UdpCommand):
+    """Base class for UDP commands that defer payload parsing until a schema is provided."""
+
+    def __init__(self, value: Any = None):
+        super().__init__(value or {})
+        self._raw_payload: bytes = b""
+
+    def deserialize(self, payload: bytes) -> None:
+        self._raw_payload = payload
+
+    def map_features(self, schema: list[T_Schema]) -> None:
+        """
+        Re-maps the parsed payload to the actual schema.
+        Call this after deserialization once the schema is known.
+        """
+        raise NotImplementedError
 
 
 class CmdAccessControl(SyncleoBoolCommand):
@@ -643,7 +662,56 @@ class CmdTimeSync(SyncleoCompositeCommand):
         return struct.pack("<Ih", int(self.value[0]), int(self.value[1]))
 
 
-class CmdDataSource(UdpCommand):
+class CmdCustomCommand(DeferredMappingCommand[CustomCommandField]):
+    _STRUCT_FORMATS: ClassVar[dict[int, str]] = {1: "<B", 2: "<h", 4: "<i", 8: "<d"}
+
+    def __init__(
+        self,
+        command_type: UdpCommandType = UdpCommandType.PING,
+        value: dict[CustomCommandField, float] | None = None,
+    ):
+        super().__init__(value or {})
+        self.command_type = command_type
+
+    def serialize(self) -> bytes:
+        payload = bytearray()
+        for field, val in self.value.items():
+            struct_format = self._STRUCT_FORMATS.get(field.size)
+            if not struct_format:
+                continue
+
+            match field.size:
+                case 1:
+                    value = int(val) & 0xFF
+                case 2 | 4:
+                    value = int(val)
+                case 8:
+                    value = float(val)
+
+            payload.extend(struct.pack(struct_format, value))
+
+        return bytes(payload)
+
+    def map_features(self, fields: list[CustomCommandField]) -> None:
+        if not self._raw_payload:
+            return
+        self.value = {}
+        offset = 0
+
+        for field in fields:
+            if offset + field.size > len(self._raw_payload):
+                break
+
+            chunk = self._raw_payload[offset : offset + field.size]
+            struct_format = self._STRUCT_FORMATS.get(field.size)
+
+            val = struct.unpack(struct_format, chunk)[0] if struct_format else 0.0
+
+            self.value[field] = float(val)
+            offset += field.size
+
+
+class CmdDataSource(DeferredMappingCommand[str]):
     command_type = UdpCommandType.DATA_SOURCE
     _MAC_LENGTH = 6
     _FEATURE_PAYLOAD_SIZE = 14
@@ -677,20 +745,20 @@ class CmdDataSource(UdpCommand):
 
         return bytes(payload)
 
-    def deserialize(self, payload: bytes) -> None:
-        if not self.value:
-            num_features = len(payload) // self._FEATURE_PAYLOAD_SIZE
-            self.value: dict[str, DataSource | None] = {
-                f"feature_{i}": None for i in range(num_features)
-            }
+    def map_features(self, supported_features: list[str]) -> None:
+        if not self._raw_payload:
+            return
 
-        for i, feature in enumerate(list(self.value.keys())):
+        self.value = {}
+        num_chunks = len(self._raw_payload) // self._FEATURE_PAYLOAD_SIZE
+
+        for i in range(num_chunks):
+            feature_key = (
+                supported_features[i] if i < len(supported_features) else f"feature_{i}"
+            )
+
             offset = i * self._FEATURE_PAYLOAD_SIZE
-
-            if offset + self._FEATURE_PAYLOAD_SIZE > len(payload):
-                break
-
-            chunk = payload[offset : offset + self._FEATURE_PAYLOAD_SIZE]
+            chunk = self._raw_payload[offset : offset + self._FEATURE_PAYLOAD_SIZE]
             first_address, second_address, device_type = struct.unpack(
                 self._FORMAT, chunk
             )
@@ -708,21 +776,7 @@ class CmdDataSource(UdpCommand):
                     host=first_address.hex(),
                 )
 
-            self.value[feature] = source
-
-    def map_features(self, supported_features: list[str]) -> None:
-        """
-        Re-maps the parsed payload to the actual device feature keys.
-        Call this after deserialization once the device profile is known.
-        """
-        current_sources = list(self.value.values())
-
-        new_value = {
-            feature: current_sources[i] if i < len(current_sources) else None
-            for i, feature in enumerate(supported_features)
-        }
-
-        self.value = new_value
+            self.value[feature_key] = source
 
 
 class CmdExpendables(SyncleoCompositeCommand):

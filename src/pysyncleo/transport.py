@@ -19,9 +19,15 @@ _LOGGER = logging.getLogger(__name__)
 
 
 class SyncleoConnection:
-    def __init__(self, device: SyncleoUdpDevice, transport: asyncio.DatagramTransport):
+    def __init__(
+        self,
+        device: SyncleoUdpDevice,
+        transport: asyncio.DatagramTransport,
+        command_factory: Callable[[bytes, UdpCommand], UdpCommand | None] | None = None,
+    ):
         self.device = device
         self.transport = transport
+        self.command_factory = command_factory
         self.state = ConnectionState.NOT_CONNECTED
 
         self.inseq = 0
@@ -173,6 +179,11 @@ class SyncleoConnection:
             if not parsed_cmd:
                 self._send_bytes(ack_frame)
                 return
+
+            if self.command_factory and (
+                custom_cmd := self.command_factory(payload, parsed_cmd)
+            ):
+                parsed_cmd = custom_cmd
 
             if self.state == ConnectionState.CONNECTING:
                 if isinstance(parsed_cmd, CmdHandshake):
