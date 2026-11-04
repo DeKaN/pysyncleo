@@ -63,7 +63,7 @@ class UdpCommandType(IntEnum):
     TURBO = 49  # (0x31) Turbo
     NIGHT = 50  # (0x32) Night Mode
     CURRENT_AMPERAGE = 51  # (0x33) Sensor Amperage
-    POWER = 52  # (0x34) Sensor Power
+    CURRENT_POWER = 52  # (0x34) Sensor Power
     VOLTAGE = 53  # (0x35) Sensor Voltage
     SCHEDULE_SET = 64  # (0x40) Set Schedule
     SCHEDULE_REMOVE = 65  # (0x41) Remove Schedule

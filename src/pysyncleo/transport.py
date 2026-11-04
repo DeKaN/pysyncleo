@@ -69,14 +69,14 @@ class SyncleoConnection:
     def _set_state(self, new_state: ConnectionState):
         if self.state != new_state:
             self.state = new_state
-            for callback in self._state_callbacks:
+            for callback in list(self._state_callbacks):
                 try:
                     callback(new_state)
                 except Exception as e:  # noqa: BLE001
                     _LOGGER.warning(f"Error in state callback {callback}: {e}")
 
     def _notify_callbacks(self, cmd: UdpCommand) -> None:
-        for callback in self._callbacks:
+        for callback in list(self._callbacks):
             try:
                 callback(cmd)
             except Exception as e:  # noqa: BLE001

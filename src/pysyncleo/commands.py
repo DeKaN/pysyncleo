@@ -330,6 +330,10 @@ class CmdCO2(SyncleoShortCommand):
     command_type = UdpCommandType.CO2
 
 
+class CmdCurrentPower(SyncleoShortCommand):
+    command_type = UdpCommandType.CURRENT_POWER
+
+
 class CmdPM2(SyncleoShortCommand):
     command_type = UdpCommandType.PM2
 
@@ -392,10 +396,6 @@ class CmdTotalTime(SyncleoIntCommand):
 
 class CmdStatistics(SyncleoIntCommand):
     command_type = UdpCommandType.STATISTICS
-
-
-class CmdPower(SyncleoIntCommand):
-    command_type = UdpCommandType.POWER
 
 
 class CmdPlaceholder7(SyncleoIntCommand):
@@ -680,6 +680,7 @@ class CmdCustomCommand(DeferredMappingCommand[CustomCommandField]):
             if not struct_format:
                 continue
 
+            value: int | float
             match field.size:
                 case 1:
                     value = int(val) & 0xFF
@@ -687,6 +688,8 @@ class CmdCustomCommand(DeferredMappingCommand[CustomCommandField]):
                     value = int(val)
                 case 8:
                     value = float(val)
+                case _:
+                    value = 0.0
 
             payload.extend(struct.pack(struct_format, value))
 
